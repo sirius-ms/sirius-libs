@@ -2,8 +2,10 @@ package de.unijena.bioinf.sirius.projectspace;
 
 import de.unijena.bioinf.ChemistryBase.ms.Ms2Experiment;
 import de.unijena.bioinf.sirius.IdentificationResult;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.net.URL;
 import java.util.List;
 
 public class ExperimentResult {
@@ -27,7 +29,7 @@ public class ExperimentResult {
         this.experiment = experiment;
         this.results = results;
         this.experimentName = simplify(experiment.getName());
-        this.experimentSource = simplifyURL(experiment.getSource().getFile());
+        this.experimentSource = simplifyURL(experiment.getSource());
         this.error = ErrorCause.NOERROR;
     }
 
@@ -81,12 +83,20 @@ public class ExperimentResult {
         return results;
     }
 
-    private static String simplify(String name) {
+    private static String simplify(@Nullable String name) {
+        if (name == null) return null;
         if (name.length()>64)
             name = name.substring(0,48);
         return name.replaceAll("[^A-Za-z0-9,\\-]+", "");
     }
-    private static String simplifyURL(String filename) {
+
+    private static String simplifyURL(@Nullable URL url) {
+        if (url == null) return null;
+        return simplifyURL(url.getFile());
+    }
+
+    private static String simplifyURL(@Nullable String filename) {
+        if (filename == null) return null;
         filename = new File(filename).getName();
         int i = Math.min(48,filename.lastIndexOf('.'));
         return filename.substring(0,i);
