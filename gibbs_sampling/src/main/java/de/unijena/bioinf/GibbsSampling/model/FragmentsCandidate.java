@@ -1,5 +1,6 @@
 package de.unijena.bioinf.GibbsSampling.model;
 
+import de.unijena.bioinf.ChemistryBase.chem.Ionization;
 import de.unijena.bioinf.ChemistryBase.chem.MolecularFormula;
 import de.unijena.bioinf.ChemistryBase.chem.PrecursorIonType;
 import de.unijena.bioinf.ChemistryBase.ms.*;
@@ -45,8 +46,7 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
 
             final FragmentAnnotation<AnnotatedPeak> annotation = tree.getFragmentAnnotationOrThrow(AnnotatedPeak.class);
             for (Fragment fragment : fragments) {
-                Peak peak = getPeak(annotation.get(fragment));
-
+                Peak peak = getPeak(fragment, annotation, experiment);
                 List<Fragment> fragmentsOfPeak;
                 if (peakToFragments.containsKey(peak)){
                     fragmentsOfPeak = peakToFragments.get(peak);
@@ -73,7 +73,7 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
 
         List<FragmentsCandidate> candidates = new ArrayList<>();
         for (FTree tree : trees) {
-            FragmentsAndLosses fragmentsAndLosses = getFragments(tree, peakToIdx);
+            FragmentsAndLosses fragmentsAndLosses = getFragments(tree, peakToIdx, experiment);
             double score = (tree.getAnnotationOrThrow(TreeScoring.class)).getOverallScore();
             MolecularFormula formula = tree.getRoot().getFormula();
             PrecursorIonType ionType = tree.getAnnotationOrThrow(PrecursorIonType.class);
@@ -107,6 +107,23 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
         return sum;
     }
 
+    private static Peak getPeak(Fragment fragment, FragmentAnnotation<AnnotatedPeak> annotation, Ms2Experiment experiment){
+        AnnotatedPeak annotatedPeak = annotation.get(fragment);
+        Peak peak;
+        if (annotatedPeak!=null){
+            peak = getPeak(annotation.get(fragment));
+        } else {
+            if (fragment.isRoot() && !experiment.getPrecursorIonType().getInSourceFragmentation().isEmpty() && fragment.getChildren().size()==1){
+                //if tree is resolved and ionization has in-source loss (e.g. H2O) use this mz as a proxy for the compounds peak.
+                double mzWithInsource = experiment.getPrecursorIonType().addIonAndAdduct(experiment.getIonMass()-experiment.getPrecursorIonType().getModificationMass());
+                peak = new Peak(mzWithInsource, 0d);
+            } else {
+                throw new RuntimeException("no peak annotation found");
+            }
+        }
+        return peak;
+    }
+
     private static Peak getPeak(AnnotatedPeak annotatedPeak){
         if (annotatedPeak.getOriginalPeaks().length>0){
             double meanMass = 0d;
@@ -118,13 +135,19 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
             meanMass /= annotatedPeak.getOriginalPeaks().length;
             meanIntensity /= annotatedPeak.getOriginalPeaks().length;
 
-            return new Peak(meanMass, meanIntensity);
+//            return new Peak(meanMass, meanIntensity);
+            //changed
+            return new Peak(meanMass, annotatedPeak.getRelativeIntensity());
+//            return new Peak(meanMass, meanIntensity);
         } else {
-            return new Peak(annotatedPeak.getMass(), annotatedPeak.getSumedIntensity());
+//            return new Peak(annotatedPeak.getMass(), annotatedPeak.getSumedIntensity());
+//            return new Peak(annotatedPeak.getMass(), annotatedPeak.getMaximalIntensity());
+//            return new Peak(annotatedPeak.getMass(), 0d);
+            return new Peak(annotatedPeak.getMass(), annotatedPeak.getRelativeIntensity());
         }
     }
 
-    private static FragmentsAndLosses getFragments(FTree tree, TObjectIntMap<Peak> peakToIdx) {
+    private static FragmentsAndLosses getFragments(FTree tree, TObjectIntMap<Peak> peakToIdx, Ms2Experiment experiment) {
         List<Fragment> fragments = tree.getFragments();
 
         MolecularFormula root = tree.getRoot().getFormula();
@@ -135,26 +158,39 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
         LossAnnotation<Score> lscore = tree.getOrCreateLossAnnotation(Score.class);
         FragmentAnnotation<Score> fscore = tree.getOrCreateFragmentAnnotation(Score.class);
 
+        PrecursorIonType ionType = tree.getAnnotationOrThrow(PrecursorIonType.class);
+        Ionization ionization = ionType.getIonization();
+
+        double maxIntensity = 0;
+        for (Peak peak : peakToIdx.keySet()) {
+            maxIntensity = Math.max(maxIntensity, peak.getIntensity());
+        }
 
         int i = 0;
         for (Fragment f : fragments) {
             if(!f.getFormula().equals(root)) {
-                final Peak peak = getPeak(annotation.get(f));
+                final Peak peak = getPeak(f, annotation, experiment);
                 final int idx = peakToIdx.get(peak);
                 if (idx<0){
                     System.out.println("formula "+f.getFormula()+" "+f.getFormula().getMass());
                     throw new RuntimeException("index < 0");
                 }
                 else if (idx>Short.MAX_VALUE) throw new RuntimeException("index too big");
-                final double score = fscore.get(f).sum()+lscore.get(f.getIncomingEdge()).sum();
-                lossWithIdx[i++] = new FragmentWithIndex(root.subtract(f.getFormula()).formatByHill(), (short)idx, score);
+                final Score fs = fscore.get(f);
+                final Score ls = f.getInDegree()==0?null:lscore.get(f.getIncomingEdge());
+//                final double score = (fs==null?0d:fs.sum())+(ls==null?0d:ls.sum());
+                //changed
+                lossWithIdx[i++] = new FragmentWithIndex(root.subtract(f.getFormula()).formatByHill(), ionization, (short)idx, peak.getIntensity()/maxIntensity);
+                //todo use this when switching to using ionzations per fragment
+//                lossWithIdx[i++] = new FragmentWithIndex(root.subtract(f.getFormula()).formatByHill(), f.getIonization(), (short)idx, peak.getIntensity()/maxIntensity);
+//                lossWithIdx[i++] = new FragmentWithIndex(root.subtract(f.getFormula()).formatByHill(), f.getIonization(), (short)idx, score);
 
             }
         }
 
         i = 0;
         for (Fragment f : fragments) {
-            final Peak peak = getPeak(annotation.get(f));
+            final Peak peak = getPeak(f, annotation, experiment);
             final int idx = peakToIdx.get(peak);
             if (idx<0){
                 System.out.println("formula "+f.getFormula()+" "+f.getFormula().getMass());
@@ -162,8 +198,24 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
             }
             else if (idx>Short.MAX_VALUE) throw new RuntimeException("index too big");
             //todo is root??
-            final double score = fscore.get(f).sum()+(f.isRoot()?0:lscore.get(f.getIncomingEdge()).sum());
-            fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), (short)idx, score);
+            final Score fs = fscore.get(f);
+            final Score ls = f.getInDegree()==0?null:lscore.get(f.getIncomingEdge());
+            final double score = (fs==null?0d:fs.sum())+(ls==null?0d:ls.sum());
+            //changed
+            if (f.getFormula().equals(root)){
+                fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), ionization, (short)idx, 1d);
+//                fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), f.getIonization(), (short)idx, 1d);
+            } else {
+                fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), ionization, (short)idx, peak.getIntensity()/maxIntensity);
+//                fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), f.getIonization(), (short)idx, peak.getIntensity()/maxIntensity);
+            }
+//            if (f.getFormula().equals(root)){
+//                fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), f.getIonization(), (short)idx, maxIntensity);
+//            } else {
+//                fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), f.getIonization(), (short)idx, peak.getIntensity());
+//            }
+
+//            fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), f.getIonization(), (short)idx, score);
 
         }
 
@@ -218,6 +270,8 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
                 //adding root mass if necessary
 //        double precursorIon = experiment.getIonMass();
         double theoPrecursorMass = ionType.addIonAndAdduct(root.getMass());
+        //todo use this when introducing ionization per fragment
+//        double theoPrecursorMass = tree.getRoot().getIonization().addToMass(root.getMass());
         boolean hasPrecursor = false;
         for (Peak peak : sortedSpec) {
             if (deviation.inErrorWindow(theoPrecursorMass, peak.getMass())){
@@ -237,6 +291,7 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
                 double mass;
                 if (annotatedPeak.getOriginalPeaks().length==0){
                     mass = ionType.addIonAndAdduct(f.getFormula().getMass());
+//                    mass = f.getIonization().addToMass(f.getFormula().getMass());
                 } else {
                     mass = annotatedPeak.getOriginalPeaks()[0].getMass();
                 }
@@ -251,7 +306,8 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
                     throw new RuntimeException("index < 0");
                 }
                 else if (idx>Short.MAX_VALUE) throw new RuntimeException("index too big");
-                lossWithIdx[i++] = new FragmentWithIndex(root.subtract(f.getFormula()).formatByHill(), (short)idx, f.getIncomingEdge().getWeight());
+                lossWithIdx[i++] = new FragmentWithIndex(root.subtract(f.getFormula()).formatByHill(), ionType.getIonization(), (short)idx, f.getIncomingEdge().getWeight());
+//                lossWithIdx[i++] = new FragmentWithIndex(root.subtract(f.getFormula()).formatByHill(), f.getIonization(), (short)idx, f.getIncomingEdge().getWeight());
 
             }
         }
@@ -278,7 +334,8 @@ public class FragmentsCandidate extends StandardCandidate<FragmentsAndLosses>{
                 throw new RuntimeException("index < 0");
             }
             else if (idx>Short.MAX_VALUE) throw new RuntimeException("index too big");
-            fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), (short)idx, f.getIncomingEdge().getWeight());
+            fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), ionType.getIonization(), (short)idx, f.getIncomingEdge().getWeight());
+//            fragWithIdx[i++] = new FragmentWithIndex(f.getFormula().formatByHill(), f.getIonization(), (short)idx, f.getIncomingEdge().getWeight());
 
 //            fStrings[i++] = f.getFormula().formatByHill();
 //            fIdx[i] = (short)f.getColor();

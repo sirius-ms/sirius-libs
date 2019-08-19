@@ -8,6 +8,10 @@ import gnu.trove.list.array.TDoubleArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+//import java.io.BufferedWriter;
+//import java.io.IOException;
+//import java.nio.file.Files;
+//import java.nio.file.Paths;
 import java.util.Arrays;
 
 public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> implements EdgeScorer<C> {
@@ -17,6 +21,7 @@ public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> imple
     protected final double percentageOfEdgesBelowThreshold;
     protected double threshold;
     private static final boolean percentageWithoutZeroScores = true;
+    private static final int NUMBER_OF_SAMPLES =  100000;
 
     public ScoreProbabilityDistributionEstimator(EdgeScorer<C> edgeScorer, ScoreProbabilityDistribution distribution, double percentageOfEdgesBelowThreshold) {
         this.edgeScorer = edgeScorer;
@@ -25,7 +30,20 @@ public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> imple
     }
 
     public void prepare(C[][] candidates) {
+        long start = System.currentTimeMillis();
         double[] sampledScores = sampleScores(candidates); //might be empty
+        System.out.println("sampled "+sampledScores.length+" scores");
+
+//        try {
+//            BufferedWriter writer = Files.newBufferedWriter(Paths.get("sampled_scores1.csv"));
+//            for (double sampledScore : sampledScores) {
+//                writer.write(Double.toString(sampledScore));
+//                writer.newLine();
+//            }
+//            writer.close();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
 
         estimateDistribution(sampledScores);
 
@@ -39,6 +57,10 @@ public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> imple
         } else {
             threshold = scoreProbabilityDistribution.toLogPvalue(sampledScores[idx]);
         }
+
+
+        System.out.println("estimated distribution in "+(System.currentTimeMillis()-start)+" ms");
+
         //set threshold estimate from real scores not estimated distribution!
 
 //        System.out.println("prepare old threshold "+threshold);
@@ -79,13 +101,12 @@ public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> imple
             }
             sampledScores = sampledScoresList.toArray();
         } else {
-            int numberOfSamples = 100000;
-            int numberOfTrails = numberOfSamples*20;
+            int numberOfTrails = NUMBER_OF_SAMPLES*20;
             HighQualityRandom random = new HighQualityRandom();
-            sampledScores = new double[numberOfSamples];
+            sampledScores = new double[NUMBER_OF_SAMPLES];
             int pos = 0;
             int trialCount = 0;
-            while (pos<numberOfSamples){
+            while (pos<NUMBER_OF_SAMPLES){
                 ++trialCount;
                 if (trialCount>numberOfTrails) break;;
                 int color1 = random.nextInt(candidates.length);
@@ -100,7 +121,7 @@ public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> imple
                 if (percentageWithoutZeroScores && score<=0) continue;
                 sampledScores[pos++] = score;
             }
-            if (pos<numberOfSamples) sampledScores = Arrays.copyOf(sampledScores, pos);
+            if (pos<NUMBER_OF_SAMPLES) sampledScores = Arrays.copyOf(sampledScores, pos);
         }
         return sampledScores;
     }
@@ -109,6 +130,19 @@ public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> imple
 
     public void setThresholdAndPrepare(C[][] candidates) {
         double[] sampledScores = sampleScores(candidates);
+
+
+//        try {
+//            BufferedWriter writer = Files.newBufferedWriter(Paths.get("sampled_scores2.csv"));
+//            for (double sampledScore : sampledScores) {
+//                writer.write(Double.toString(sampledScore));
+//                writer.newLine();
+//            }
+//            writer.close();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+
         estimateDistribution(sampledScores);
 
 //        if (percentageWithoutZeroScores) sampledScores = excludeZeros(sampledScores);
@@ -200,7 +234,7 @@ public class ScoreProbabilityDistributionEstimator<C extends Candidate<?>> imple
         this.edgeScorer.clean();
     }
 
-    public double[] normalization(C[][] candidates) {
+    public double[] normalization(C[][] candidates, double minimum_number_matched_peaks_losses) {
         return new double[0];
     }
 }

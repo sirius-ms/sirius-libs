@@ -83,8 +83,11 @@ public class TwoPhaseGibbsSampling<C extends Candidate<?>> extends BasicMasterJJ
 
 
         LOG().info("Running first round with "+firstRoundIds.length+" compounds.");
+        System.out.println("start building graph");
+        long start = System.currentTimeMillis();
         GraphBuilder<C> graphBuilder = GraphBuilder.createGraphBuilder(firstRoundIds, firstRoundPossibleFormulas, nodeScorers, edgeScorers, edgeFilter, cClass);
         graph = submitSubJob(graphBuilder).awaitResult();
+        System.out.println("finished building graph after: "+(System.currentTimeMillis()-start)+" ms");
     }
 
     private int maxSteps = -1;
@@ -104,9 +107,12 @@ public class TwoPhaseGibbsSampling<C extends Candidate<?>> extends BasicMasterJJ
         Graph.validateAndThrowError(graph, LOG());
         gibbsParallel = new GibbsParallel<>(graph, repetitions);
         gibbsParallel.setIterationSteps(maxSteps, burnIn);
+        long start = System.currentTimeMillis();
         submitSubJob(gibbsParallel);
 
+
         results1 = gibbsParallel.awaitResult();
+        System.out.println("finished running "+repetitions+" repetitions in parallel: "+(System.currentTimeMillis()-start)+" ms");
         checkForInterruption();
 
         firstRoundIds = gibbsParallel.getGraph().getIds();

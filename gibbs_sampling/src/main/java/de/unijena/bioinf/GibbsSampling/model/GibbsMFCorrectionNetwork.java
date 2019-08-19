@@ -1,10 +1,14 @@
 package de.unijena.bioinf.GibbsSampling.model;
 
+import com.google.common.io.Files;
 import de.unijena.bioinf.ChemistryBase.algorithm.Scored;
 import de.unijena.bioinf.jjobs.BasicMasterJJob;
 import gnu.trove.list.array.TIntArrayList;
 import gnu.trove.set.hash.TIntHashSet;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.nio.charset.Charset;
 import java.util.*;
 
 public class GibbsMFCorrectionNetwork<C extends Candidate<?>> extends BasicMasterJJob<Scored<C>[][]> {
@@ -157,6 +161,31 @@ public class GibbsMFCorrectionNetwork<C extends Candidate<?>> extends BasicMaste
 
         int step = (burnIn + maxSteps)/10;
 
+        BufferedWriter writerProbability;
+        BufferedWriter writerActive;
+        if (OUTPUT_SAMPLE_PROBABILITY) {
+
+            if (iniAssignMostLikely){
+
+                writerProbability = Files.newWriter(File.createTempFile("zodiac_progress_posterior_probability_", ".csv", new File(".")), Charset.defaultCharset());
+                writerActive = Files.newWriter(File.createTempFile("zodiac_progress_active_candidates_", ".csv", new File(".")), Charset.defaultCharset());
+            } else {
+                writerProbability = Files.newWriter(File.createTempFile("zodiac_progress_init_random_posterior_probability_", ".csv", new File(".")), Charset.defaultCharset());
+                writerActive = Files.newWriter(File.createTempFile("zodiac_progress_init_random_active_candidates_", ".csv", new File(".")), Charset.defaultCharset());
+            }
+
+
+            writerProbability.write("step\tlog_probability");
+            writerProbability.newLine();
+
+            writerActive.write("step");
+            for (String id : graph.getIds()) {
+                writerActive.write("\t"+id);
+            }
+            writerActive.newLine();
+        }
+
+
         for(int i = 0; i < burnIn + maxSteps; ++i) {
             this.currentRound = i;
             boolean changed = false;
@@ -184,7 +213,19 @@ public class GibbsMFCorrectionNetwork<C extends Candidate<?>> extends BasicMaste
                     }
 
                 }
-                System.out.println("posterior probability: "+overallProb+" | correct "+isCorrect);
+
+//                System.out.println("posterior probability: "+overallProb+" | correct "+isCorrect);
+
+                writerProbability.write(String.valueOf(i) + "\t" + overallProb);
+                writerProbability.newLine();
+
+                writerActive.write(String.valueOf(i));
+                for (int j = 0; j < graph.numberOfCompounds(); j++) {
+                    Scored<C> candidate = graph.getPossibleFormulas(j)[activeIdx[j]];
+                    writerActive.write("\t" + ((StandardCandidate)candidate.getCandidate()).getFormula().formatByHill());
+                }
+                writerActive.newLine();
+
             }
 
 
@@ -204,6 +245,13 @@ public class GibbsMFCorrectionNetwork<C extends Candidate<?>> extends BasicMaste
 //
 //            }
         }
+
+        if (OUTPUT_SAMPLE_PROBABILITY) {
+            writerProbability.close();
+            writerActive.close();
+
+        }
+
         return getChosenFormulas();
     }
 

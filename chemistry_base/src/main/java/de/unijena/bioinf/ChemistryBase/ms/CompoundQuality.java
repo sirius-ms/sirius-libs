@@ -5,7 +5,7 @@ import java.util.*;
 /**
  * Created by ge28quv on 04/07/17.
  */
-public class CompoundQuality {
+public class CompoundQuality implements Cloneable {
     List<SpectrumProperty> properties;
 
     public CompoundQuality() {
@@ -59,6 +59,11 @@ public class CompoundQuality {
         }
         return false;
     }
+
+    private void removeAllProperties() {
+        properties.clear();
+    }
+
     public static boolean isNotBadQuality(Ms2Experiment experiment){
         return experiment.getAnnotation(CompoundQuality.class, new CompoundQuality(SpectrumProperty.Good)).isGoodQuality();
     }
@@ -75,8 +80,14 @@ public class CompoundQuality {
             quality = new CompoundQuality(property);
             experiment.setAnnotation(CompoundQuality.class, quality);
         } else {
-            quality.removeProperty(SpectrumProperty.Good);//all other properties are negative!
-            quality.addProperty(property);
+            if (property== SpectrumProperty.Good) {
+                quality.removeAllProperties(); //all other properties are negative!
+                quality.addProperty(property);
+            } else {
+                quality.removeProperty(SpectrumProperty.Good);//all other properties are negative!
+                quality.addProperty(property);
+            }
+
         }
     }
 
@@ -129,5 +140,14 @@ public class CompoundQuality {
             if (iterator.hasNext()) builder.append(",");
         }
         return builder.toString();
+    }
+
+    @Override
+    protected Object clone() {
+        CompoundQuality clone = new CompoundQuality();
+        for (SpectrumProperty property : this.properties) {
+            clone.addProperty(property);
+        }
+        return clone;
     }
 }

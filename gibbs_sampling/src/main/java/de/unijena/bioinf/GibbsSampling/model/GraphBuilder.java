@@ -5,9 +5,11 @@ import de.unijena.bioinf.ChemistryBase.math.HighQualityRandom;
 import de.unijena.bioinf.GibbsSampling.model.distributions.ScoreProbabilityDistributionEstimator;
 import de.unijena.bioinf.GibbsSampling.model.distributions.ScoreProbabilityDistributionFix;
 import de.unijena.bioinf.jjobs.*;
+import gnu.trove.impl.sync.TSynchronizedIntList;
 import gnu.trove.list.TDoubleList;
 import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.procedure.TDoubleProcedure;
+import gnu.trove.queue.TIntQueue;
 import gnu.trove.set.hash.TIntHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 
 public class GraphBuilder<C extends Candidate<?>> extends BasicMasterJJob<Graph<C>> implements JobProgressEventListener{
@@ -159,52 +162,74 @@ public class GraphBuilder<C extends Candidate<?>> extends BasicMasterJJob<Graph<
         size = graph.getSize();
         step = Math.max(size/20, 1);
         updateProgress(0, size,0, "Computing edges");
-        for(int i = 0; i < size; ++i) {
-            final int final_i = i;
-            final C candidate = graph.getPossibleFormulas1D(i).getCandidate();
-            //todo use worker jobs
-            BasicJJob job = new BasicJJob() {
-                @Override
-                protected Object compute() throws Exception {
-                    TDoubleArrayList scores = new TDoubleArrayList(graph.getSize());
+        System.out.println("computing edges");
+        long start = System.currentTimeMillis();
 
-                    for(int j = 0; j < graph.getSize(); ++j) {
-                        if(graph.getPeakIdx(final_i) == graph.getPeakIdx(j)) {
-                            scores.add(0.0D);
-                        } else {
-                            C candidate2 = graph.getPossibleFormulas1D(j).getCandidate();
-                            double score = 0.0D;
+        List<Integer> allIndices = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            allIndices.add(i);
+        }
+        ConcurrentLinkedQueue<Integer> candidatesQueue = new ConcurrentLinkedQueue<>(allIndices);
 
-                            for(int k = 0; k < edgeScorers.length; ++k) {
-                                EdgeScorer edgeScorer = edgeScorers[k];
-                                score += edgeScorer.score(candidate, candidate2);
-                            }
-
-                            scores.add(score);
-                        }
-                    }
-
-                    edgeFilter.filterEdgesAndSetThreshold(final_graph, final_i, scores.toArray());
-
-                    //progess is always fired if job done
-                    checkForInterruption();
-                    return null;
-                }
-            };
-
-
-            job.addPropertyChangeListener(this);
+        List<BasicJJob> jobs = new ArrayList<>();
+        for (int i = 0; i < super.jobManager.getCPUThreads(); i++) {
+            BasicJJob job = new EdgeCalculationWorker(candidatesQueue, graph);
+            jobs.add(job);
             submitSubJob(job);
         }
+        System.out.println("running "+jobs.size()+" workers to compute edges");
 
-        awaitAllSubJobs();
+        for (BasicJJob job : jobs) {
+            job.awaitResult();
+        }
+//        for(int i = 0; i < size; ++i) {
+//            final int final_i = i;
+//            final C candidate = graph.getPossibleFormulas1D(i).getCandidate();
+//            //todo use worker jobs
+//            BasicJJob job = new BasicJJob() {
+//                @Override
+//                protected Object compute() throws Exception {
+//                    TDoubleArrayList scores = new TDoubleArrayList(graph.getSize());
+//
+//                    for(int j = 0; j < graph.getSize(); ++j) {
+//                        if(graph.getPeakIdx(final_i) == graph.getPeakIdx(j)) {
+//                            scores.add(0.0D);
+//                        } else {
+//                            C candidate2 = graph.getPossibleFormulas1D(j).getCandidate();
+//                            double score = 0.0D;
+//
+//                            for(int k = 0; k < edgeScorers.length; ++k) {
+//                                EdgeScorer edgeScorer = edgeScorers[k];
+//                                score += edgeScorer.score(candidate, candidate2);
+//                            }
+//
+//                            scores.add(score);
+//                        }
+//                    }
+//
+//                    edgeFilter.filterEdgesAndSetThreshold(final_graph, final_i, scores.toArray());
+//
+//                    //progess is always fired if job done
+//                    checkForInterruption();
+//                    return null;
+//                }
+//            };
+//
+//
+//            job.addPropertyChangeListener(this);
+//            submitSubJob(job);
+//        }
+
+//        awaitAllSubJobs();
+        System.out.println("finished computing edges after "+(System.currentTimeMillis()-start));
+
 
     }
 
 
-    private void setConnections() {
+    private void setConnections() throws ExecutionException {
         long time = System.currentTimeMillis();
-        graph.connections = this.edgeFilter.postprocessCompleteGraph(graph);
+        graph.connections = this.edgeFilter.postprocessCompleteGraph(graph, this);
         HighQualityRandom random = new HighQualityRandom();
 
         if (GibbsMFCorrectionNetwork.DEBUG){
@@ -277,6 +302,49 @@ public class GraphBuilder<C extends Candidate<?>> extends BasicMasterJJob<Graph<
         ++numberOfFinishedComputations;
         if(numberOfFinishedComputations % step == 0 || numberOfFinishedComputations==size) {
             LOG().info(Math.round(100*(numberOfFinishedComputations)/size)+"%");
+        }
+    }
+
+    private class EdgeCalculationWorker extends BasicJJob {
+        private ConcurrentLinkedQueue<Integer> remainingCandidates;
+        private Graph<C> graph;
+
+        private EdgeCalculationWorker(ConcurrentLinkedQueue<Integer> remainingCandidates, Graph<C> graph) {
+            this.remainingCandidates = remainingCandidates;
+            this.graph = graph;
+        }
+        @Override
+        protected Object compute() throws Exception {
+            while (!remainingCandidates.isEmpty()){
+                Integer idx = remainingCandidates.poll();
+                if (idx==null) continue;
+                final C candidate = graph.getPossibleFormulas1D(idx).getCandidate();
+
+                TDoubleArrayList scores = new TDoubleArrayList(graph.getSize());
+
+                for(int j = 0; j < graph.getSize(); ++j) {
+                    if(graph.getPeakIdx(idx) == graph.getPeakIdx(j)) {
+                        scores.add(0.0D);
+                    } else {
+                        C candidate2 = graph.getPossibleFormulas1D(j).getCandidate();
+                        double score = 0.0D;
+
+                        for(int k = 0; k < edgeScorers.length; ++k) {
+                            EdgeScorer edgeScorer = edgeScorers[k];
+                            score += edgeScorer.score(candidate, candidate2);
+                        }
+
+                        scores.add(score);
+                    }
+                }
+
+                edgeFilter.filterEdgesAndSetThreshold(graph, idx, scores.toArray());
+
+                //progess is always fired if job done
+//                checkForInterruption();
+
+            }
+            return null;
         }
     }
 

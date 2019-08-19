@@ -1,9 +1,18 @@
 package de.unijena.bioinf.GibbsSampling.model;
 
+import de.unijena.bioinf.ChemistryBase.jobs.SiriusJobs;
+import de.unijena.bioinf.jjobs.BasicJJob;
+import de.unijena.bioinf.jjobs.MasterJJob;
+import gnu.trove.list.array.TDoubleArrayList;
 import gnu.trove.list.array.TIntArrayList;
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
 
 public class EdgeThresholdMinConnectionsFilter extends LocalEdgeFilter {
     private double basicThreshold;
@@ -88,46 +97,36 @@ public class EdgeThresholdMinConnectionsFilter extends LocalEdgeFilter {
         this.basicThreshold = threshold;
     }
 
-    public int[][] postprocessCompleteGraph(Graph graph) {
+    public int[][] postprocessCompleteGraph(Graph graph, MasterJJob masterJJob) throws ExecutionException {
+        long start = System.currentTimeMillis();
         TIntArrayList[] connectionsList = new TIntArrayList[graph.getSize()];
         
         for(int i = 0; i < graph.getSize(); ++i) {
             connectionsList[i] = new TIntArrayList(100);
         }
-        
-        for(int i = 0; i < graph.numberOfCompounds(); ++i) {
-            int left = graph.getPeakLeftBoundary(i);
-            int right = graph.getPeakRightBoundary(i);
-            double[] thresholds = new double[right - left + 1];
 
-            for(int j = left; j <= right; ++j) {
-                thresholds[j - left] = graph.getEdgeThreshold(j);
-            }
+        List<Integer> allIndices = new ArrayList<>(graph.numberOfCompounds());
+        for (int i = 0; i < graph.numberOfCompounds(); i++) {
+            allIndices.add(i);
+        }
+        ConcurrentLinkedQueue<Integer> compoundIndicesQueue = new ConcurrentLinkedQueue<>(allIndices);
 
-            Arrays.sort(thresholds);
-            int pos = Math.min(this.numberOfCandidatesWithMinConnCount, thresholds.length-1);
-            double t = pos == 0?thresholds[thresholds.length-1]:thresholds[pos-1];
-            if(t < this.basicThreshold) {
-                throw new RuntimeException("individual edge threshold must not be smaller than overall threshold");
-            }
-            //rather really look at the number of edges (may be less)? -> not if worth threshold is 0
-            for(int j = left; j <= right; ++j) {
-                double current_t = graph.getEdgeThreshold(j);
-                if(current_t > t) {
-                    double diff = t - current_t;
-                    int[] connections1 = graph.getLogWeightConnections(j);
+        List<BasicJJob> jobs = new ArrayList<>();
+        for (int i = 0; i < SiriusJobs.getGlobalJobManager().getCPUThreads(); i++) {
+            BasicJJob job = new EdgeCalculationWorker(compoundIndicesQueue, graph);
+            jobs.add(job);
+            masterJJob.submitSubJob(job);
+        }
+        System.out.println("running "+jobs.size()+" workers to postprocess edges");
 
-                    for(int k = 0; k < connections1.length; ++k) {
-                        int c = connections1[k];
-                        double w = graph.getLogWeight(j, c);
-                        graph.setLogWeight(j, c, Math.max(0.0D, w + diff));
-                    }
-
-                    graph.setEdgeThreshold(j, t);
-                }
-            }
+        for (BasicJJob job : jobs) {
+            job.awaitResult();
         }
 
+
+        System.out.println("postprocess: first step took "+(System.currentTimeMillis()-start));
+
+        start = System.currentTimeMillis();
         for(int i = 0; i < graph.getSize(); ++i) {
             for(int j = i + 1; j < graph.getSize(); ++j) {
                 double a = graph.getLogWeight(i, j);
@@ -152,13 +151,176 @@ public class EdgeThresholdMinConnectionsFilter extends LocalEdgeFilter {
             }
         }
 
-        int[][] connections = new int[graph.getSize()][];
+//todo errors with parallelization.
+//        allIndices = new ArrayList<>(graph.getSize());
+//        for (int i = 0; i < graph.numberOfCompounds(); i++) {
+//            allIndices.add(i);
+//        }
+//        System.out.println("size "+allIndices.size());
+//        ConcurrentLinkedQueue<Integer> candidateIndicesQueue = new ConcurrentLinkedQueue<>(allIndices);
+//        System.out.println("size2 "+candidateIndicesQueue.size());
+//        jobs = new ArrayList<>();
+//        for (int i = 0; i < SiriusJobs.getGlobalJobManager().getCPUThreads(); i++) {
+//            BasicJJob job = new MakeEdgeScoresSymmetricWorker(candidateIndicesQueue, graph, connectionsList);
+//            jobs.add(job);
+//            masterJJob.submitSubJob(job);
+//        }
+//        System.out.println("running "+jobs.size()+" workers to postprocess edges, symmetry step");
+//
+//
+//        for (BasicJJob job : jobs) {
+//            job.awaitResult();
+//        }
+//
+//        for (TIntArrayList intArrayList : connectionsList) {
+//            intArrayList.sort();
+//        }
+        System.out.println("postprocess: second step symmetry took "+(System.currentTimeMillis()-start));
 
+
+//        candidateIndicesQueue = new ConcurrentLinkedQueue<>(allIndices);
+//        System.out.println("size3 "+candidateIndicesQueue.size());
+        int[][] connections = new int[graph.getSize()][];
+//        jobs = new ArrayList<>();
+//        for (int i = 0; i < SiriusJobs.getGlobalJobManager().getCPUThreads(); i++) {
+//            BasicJJob job = new CopyArrayJob(connections, connectionsList, candidateIndicesQueue);
+//            jobs.add(job);
+//            masterJJob.submitSubJob(job);
+//        }
+//        for (BasicJJob job : jobs) {
+//            job.awaitResult();
+//        }
         for(int i = 0; i < graph.getSize(); ++i) {
             connections[i] = connectionsList[i].toArray();
         }
 
+        System.out.println("postprocess: second step took "+(System.currentTimeMillis()-start));
+
         return connections;
+    }
+
+    private class EdgeCalculationWorker extends BasicJJob {
+        private ConcurrentLinkedQueue<Integer> remainingCandidates;
+        private Graph graph;
+
+        private EdgeCalculationWorker(ConcurrentLinkedQueue<Integer> remainingCandidates, Graph graph) {
+            this.remainingCandidates = remainingCandidates;
+            this.graph = graph;
+        }
+        @Override
+        protected Object compute() throws Exception {
+            while (!remainingCandidates.isEmpty()){
+                Integer idx = remainingCandidates.poll();
+                if (idx==null) continue;
+
+                int left = graph.getPeakLeftBoundary(idx);
+                int right = graph.getPeakRightBoundary(idx);
+                double[] thresholds = new double[right - left + 1];
+
+                for(int j = left; j <= right; ++j) {
+                    thresholds[j - left] = graph.getEdgeThreshold(j);
+                }
+
+                Arrays.sort(thresholds);
+                int pos = Math.min(numberOfCandidatesWithMinConnCount, thresholds.length-1);
+                double t = pos == 0?thresholds[thresholds.length-1]:thresholds[pos-1];
+                if(t < basicThreshold) {
+                    throw new RuntimeException("individual edge threshold must not be smaller than overall threshold");
+                }
+                //rather really look at the number of edges (may be less)? -> not if worth threshold is 0
+                for(int j = left; j <= right; ++j) {
+                    double current_t = graph.getEdgeThreshold(j);
+                    if(current_t > t) {
+                        double diff = t - current_t;
+                        int[] connections1 = graph.getLogWeightConnections(j);
+
+                        for(int k = 0; k < connections1.length; ++k) {
+                            int c = connections1[k];
+                            double w = graph.getLogWeight(j, c);
+                            graph.setLogWeight(j, c, Math.max(0.0D, w + diff));
+                        }
+
+                        graph.setEdgeThreshold(j, t);
+                    }
+                }
+
+            }
+            return null;
+        }
+    }
+
+    private class MakeEdgeScoresSymmetricWorker extends BasicJJob {
+        private ConcurrentLinkedQueue<Integer> remainingCandidates;
+        private Graph graph;
+        private TIntArrayList[] connectionsList;
+
+        private MakeEdgeScoresSymmetricWorker(ConcurrentLinkedQueue<Integer> remainingCandidates, Graph graph, TIntArrayList[] connectionsList) {
+            this.remainingCandidates = remainingCandidates;
+            this.graph = graph;
+            this.connectionsList = connectionsList;
+        }
+        @Override
+        protected Object compute() throws Exception {
+            while (!remainingCandidates.isEmpty()){
+                Integer idx = remainingCandidates.poll();
+                if (idx==null) continue;
+
+                for(int j = idx + 1; j < graph.getSize(); ++j) {
+                    double max;
+                    synchronized (graph) {
+                        double a = graph.getLogWeight(idx, j);
+                        double b = graph.getLogWeight(j, idx);
+
+
+                        if (a < b) {
+                            graph.setLogWeight(idx, j, b); //should never add a new posz
+                            max = b;
+                        } else if (b < a) {
+                            graph.setLogWeight(j, idx, a);
+                            max = a;
+                        } else {
+                            max = a;
+                        }
+                    }
+                    synchronized (connectionsList) {
+
+                        if(max > 0.0D) {
+                            connectionsList[idx].add(j);
+                            connectionsList[j].add(idx);
+                        } else if (max < 0d) {
+                            throw new RuntimeException("Edge has a negative weight");
+                        }
+                    }
+
+                }
+
+            }
+            return null;
+        }
+    }
+
+
+    private class CopyArrayJob extends BasicJJob {
+        private ConcurrentLinkedQueue<Integer> remainingCandidates;
+        private int[][] connections;
+        private TIntArrayList[] connectionsList;
+
+        private CopyArrayJob(int[][] connections, TIntArrayList[] connectionsList, ConcurrentLinkedQueue<Integer> remainingCandidates) {
+            this.remainingCandidates = remainingCandidates;
+            this.connections = connections;
+            this.connectionsList = connectionsList;
+        }
+        @Override
+        protected Object compute() throws Exception {
+            while (!remainingCandidates.isEmpty()){
+                Integer idx = remainingCandidates.poll();
+                if (idx==null) continue;
+
+                connections[idx] = connectionsList[idx].toArray();
+
+            }
+            return null;
+        }
     }
 
 }

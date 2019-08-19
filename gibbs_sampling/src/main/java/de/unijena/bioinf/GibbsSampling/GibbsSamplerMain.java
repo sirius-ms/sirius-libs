@@ -9,11 +9,9 @@ import de.unijena.bioinf.ChemistryBase.ms.ft.*;
 import de.unijena.bioinf.ChemistryBase.ms.utils.SimpleMutableSpectrum;
 import de.unijena.bioinf.ChemistryBase.ms.utils.SimpleSpectrum;
 import de.unijena.bioinf.ChemistryBase.ms.utils.Spectrums;
-import de.unijena.bioinf.FragmentationTreeConstruction.model.Decomposition;
 import de.unijena.bioinf.GibbsSampling.model.*;
 import de.unijena.bioinf.GibbsSampling.model.distributions.*;
 import de.unijena.bioinf.GibbsSampling.model.scorer.*;
-import de.unijena.bioinf.MassDecomposer.Chemistry.MassToFormulaDecomposer;
 import de.unijena.bioinf.babelms.GenericParser;
 import de.unijena.bioinf.babelms.MsExperimentParser;
 import de.unijena.bioinf.babelms.json.FTJsonReader;
@@ -1844,7 +1842,7 @@ public class GibbsSamplerMain {
             final double cosine = Double.parseDouble(cols[indices[4]]);
             final int sharedPeaks = Integer.parseInt(cols[indices[5]]);
             final LibraryHitQuality quality = LibraryHitQuality.valueOf(cols[indices[6]]);
-            LibraryHit libraryHit = new LibraryHit(experiment, formula, structure, ionType, cosine, sharedPeaks, quality);
+            LibraryHit libraryHit = new LibraryHit(experiment, formula, structure, ionType, cosine, sharedPeaks, quality, ionType.neutralMassToPrecursorMass(formula.getMass()));
             for (C candidate : candidatesList) {
                 candidate.setLibraryHit(libraryHit);
             }
@@ -1927,7 +1925,7 @@ public class GibbsSamplerMain {
                     final double cosine = Double.parseDouble(cols[indices[4]]);
                     final int sharedPeaks = Integer.parseInt(cols[indices[5]]);
                     final LibraryHitQuality quality = LibraryHitQuality.valueOf(cols[indices[6]]);
-                    LibraryHit libraryHit = new LibraryHit(experiment, formula, structure, ionType, cosine, sharedPeaks, quality);
+                    LibraryHit libraryHit = new LibraryHit(experiment, formula, structure, ionType, cosine, sharedPeaks, quality, ionType.neutralMassToPrecursorMass(formula.getMass()));
                     for (C candidate : candidatesList) {
                         candidate.setLibraryHit(libraryHit);
                     }
@@ -2065,7 +2063,7 @@ public class GibbsSamplerMain {
         for (String id : idList) {
             List<C> candidates = candidateMap.get(id);
             Ms2Experiment experiment = candidates.get(0).getExperiment();
-            PrecursorIonType[] guessed = sirius.guessIonization(experiment, ionTypes);
+            PrecursorIonType[] guessed = sirius.guessIonization(experiment, ionTypes).getGuessedIonTypes();
 
             if (guessed.length==0) continue;
 

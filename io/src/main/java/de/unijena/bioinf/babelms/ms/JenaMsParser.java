@@ -169,7 +169,7 @@ public class JenaMsParser implements Parser<Ms2Experiment> {
 
         private static final Pattern COLLISION_PATTERN = Pattern.compile("((" + decimalPattern + ")?|((?:Ramp\\s*)?" + decimalPattern + "\\s*-\\s*" + decimalPattern + "))");
 
-        private static final Pattern RETENTION_PATTER = Pattern.compile("(?:PT)?(" + decimalPattern + ")S?");
+        private static final Pattern RETENTION_PATTER = Pattern.compile("(?:PT)?(" + decimalPattern + ")\\s*[sS]?");
 
         private static final Pattern PEAK_PATTERN = Pattern.compile("(" + decimalPattern + ")\\s+(" + decimalPattern + ")");
 
@@ -261,7 +261,7 @@ public class JenaMsParser implements Parser<Ms2Experiment> {
             } else if (optionName.contains("ms1")) {
                 if (currentSpectrum.size() > 0) newSpectrum();
                 this.spectrumType = SPECTRUM_TYPE.MS1;
-            } else if (optionName.equals("retention")) {
+            } else if (optionName.equalsIgnoreCase("rt") || optionName.equalsIgnoreCase("retention")) {
                 parseRetention(value);
             } else if (optionName.contains("ion")) {
                 final PrecursorIonType ion = PeriodicTable.getInstance().ionByName(value.trim());

@@ -1,11 +1,11 @@
 package de.unijena.bioinf.ChemistryBase.ms;
 
+import de.unijena.bioinf.ChemistryBase.exceptions.InsufficientDataException;
 import de.unijena.bioinf.ChemistryBase.math.NormalDistribution;
 import de.unijena.bioinf.ChemistryBase.ms.utils.SimpleMutableSpectrum;
 import de.unijena.bioinf.ChemistryBase.ms.utils.SimpleSpectrum;
 import de.unijena.bioinf.ChemistryBase.ms.utils.Spectrums;
 import gnu.trove.list.array.TDoubleArrayList;
-import gnu.trove.map.hash.TDoubleDoubleHashMap;
 import gnu.trove.map.hash.TDoubleObjectHashMap;
 import gnu.trove.set.hash.TDoubleHashSet;
 import org.slf4j.Logger;
@@ -17,7 +17,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -55,7 +54,7 @@ public abstract class IsolationWindow {
      * estimate the isolation filter from a list of {@link de.unijena.bioinf.ChemistryBase.ms.IsolationWindow.IntensityRatio}
      * @param intensityRatios
      */
-    protected abstract void estimateDistribution(IsotopeRatioInformation intensityRatios);
+    protected abstract void estimateDistribution(IsotopeRatioInformation intensityRatios, Ms2Dataset ms2Dataset) throws InsufficientDataException;
 
 
     /**
@@ -136,9 +135,9 @@ public abstract class IsolationWindow {
 
     public abstract double getEstimatedMassShift();
 
-    public void estimate(Ms2Dataset ms2Dataset) {
+    public void estimate(Ms2Dataset ms2Dataset) throws InsufficientDataException {
         IsotopeRatioInformation isotopeRatioInformation = extractIntensityRatios(ms2Dataset);
-        estimateDistribution(isotopeRatioInformation);
+        estimateDistribution(isotopeRatioInformation, ms2Dataset);
     }
 
 
@@ -157,6 +156,8 @@ public abstract class IsolationWindow {
 //        mutableMeasurementProfile.setAllowedMassDeviation(new Deviation(100, 0.01));
 //        mutableMeasurementProfile.setAllowedMassDeviation(new Deviation(5));
 
+
+        boolean foundIonPeakInMs2AtLeastOnce = false;
 
         int expCounter = 0;
         int expCounter2 = 0;
@@ -187,15 +188,17 @@ public abstract class IsolationWindow {
                     ms2Spectra.add(experiment.getMs2Spectra().get(i));
                 }
             } else if (experiment.getMs1Spectra().size()==1){
-                //MS1 corresponds to all MS2
-                for (int i = 0; i < experiment.getMs2Spectra().size(); i++) {
-                    ms1Spectra.add(experiment.getMs1Spectra().get(0));
-                    ms2Spectra.add(experiment.getMs2Spectra().get(i));
-                }
+//                //MS1 corresponds to all MS2
+//                for (int i = 0; i < experiment.getMs2Spectra().size(); i++) {
+//                    ms1Spectra.add(experiment.getMs1Spectra().get(0));
+//                    ms2Spectra.add(experiment.getMs2Spectra().get(i));
+//                }
+                LOG.warn("cannot match ms1 and ms2 spectra for isolation filter estimation: "+experiment.getName());
+                continue;
             } else {
-                if (DEBUG) {
-                    LOG.warn("cannot match ms1 and ms2 spectra for isolation filter estimation: "+experiment.getName());
-                }
+//                if (DEBUG) {
+                LOG.warn("cannot match ms1 and ms2 spectra for isolation filter estimation: "+experiment.getName());
+//                }
                 continue;
             }
 
@@ -238,6 +241,8 @@ public abstract class IsolationWindow {
                     continue;
                 }
 
+
+                foundIonPeakInMs2AtLeastOnce = true;
 
                 //match peaks
                 //todo match based on relative diff -> allow just smaller mass diff?
@@ -315,7 +320,9 @@ public abstract class IsolationWindow {
 
         }
 
-        if (normalizedPatterns.size()==0){
+        if (!foundIonPeakInMs2AtLeastOnce) {
+            LOG.warn("Cannot estimate isolation window. Were ion peaks removed from MS2?");
+        } else if (normalizedPatterns.size()==0){
             LOG.warn("Cannot estimate isolation window no isotope patterns (in MS1 or MS2) found.");
         }
 
@@ -864,6 +871,10 @@ public abstract class IsolationWindow {
 
         public double[] getMS2Intensity(double pos){
             return posToFilter.get(pos).getMS2Intensity().toArray();
+        }
+
+        public int getExampleSize(double pos) {
+            return posToFilter.get(pos).exampleSize();
         }
 
     }

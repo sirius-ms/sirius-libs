@@ -57,7 +57,7 @@ public class JenaMsWriter implements DataWriter<Ms2Experiment> {
         writeIfAvailable(writer, ">quality", data.getAnnotation(CompoundQuality.class));
         final RetentionTime retentionTime = data.getAnnotation(RetentionTime.class);
         if (retentionTime!=null){
-            write(writer, ">retention", String.valueOf(retentionTime.getMiddleTime())+"s");
+            write(writer, ">rt", String.valueOf(retentionTime.getMiddleTime())+"s");
         }
         final Map<String,String> arbitraryKeys = data.getAnnotation(Map.class, new HashMap<String,String>());
         for (Map.Entry<String,String> e : arbitraryKeys.entrySet()) {
