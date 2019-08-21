@@ -165,6 +165,14 @@ public class Sirius {
         }
     }
 
+    public Sirius.SiriusIdentificationJob makeIdentificationJob(final Ms2Experiment experiment, final int numberOfResultsToReport) {
+        return makeIdentificationJob(experiment, numberOfResultsToReport, -1, true);
+    }
+
+    public Sirius.SiriusIdentificationJob makeIdentificationJob(final Ms2Experiment experiment, final int numberOfResultsToReport, final boolean beautifyTrees) {
+        return new SiriusIdentificationJob(experiment, numberOfResultsToReport, -1, beautifyTrees);
+    }
+
     public Sirius.SiriusIdentificationJob makeIdentificationJob(final Ms2Experiment experiment, final int numberOfResultsToReport, final int numberOfResultsToReportPerIonization) {
         return makeIdentificationJob(experiment, numberOfResultsToReport, numberOfResultsToReportPerIonization, true);
     }
