@@ -112,11 +112,11 @@ public class Sirius {
             submitSubJob(instance);
             AbstractTreeComputationInstance.FinalResult fr = instance.awaitResult();
 
-            List<IdentificationResult> r = createIdentificationResults(fr, instance);//postprocess results
+            List<IdentificationResult> r = createIdentificationResults(fr, instance, pinput);//postprocess results
             return r;
         }
 
-        private List<IdentificationResult> createIdentificationResults(AbstractTreeComputationInstance.FinalResult fr, AbstractTreeComputationInstance computationInstance) {
+        private List<IdentificationResult> createIdentificationResults(AbstractTreeComputationInstance.FinalResult fr, AbstractTreeComputationInstance computationInstance, ProcessedInput initialInput) {
             addScoreThresholdOnUnconsideredCandidates(fr, computationInstance.precompute());
 
             final List<IdentificationResult> irs = new ArrayList<>();
@@ -127,7 +127,7 @@ public class Sirius {
 
                 //beautify tree (try to explain more peaks)
                 if (beautifyTrees)
-                    beautifyTree(this, result, experiment, experiment.getAnnotation(ForbidRecalibration.class, ForbidRecalibration.ALLOWED) == ForbidRecalibration.ALLOWED);
+                    beautifyTree(this, result, experiment, experiment.getAnnotation(ForbidRecalibration.class, ForbidRecalibration.ALLOWED) == ForbidRecalibration.ALLOWED, initialInput);
                 final ProcessedInput processedInput = result.getStandardTree().getAnnotationOrNull(ProcessedInput.class);
                 if (processedInput != null)
                     result.setAnnotation(Ms2Experiment.class, processedInput.getExperimentInformation());
@@ -622,7 +622,7 @@ public class Sirius {
 
 
     public boolean beautifyTree(IdentificationResult result, Ms2Experiment experiment) {
-        return beautifyTree(null, result, experiment, true);
+        return beautifyTree(null, result, experiment, true, null);
     }
 
     /**
@@ -634,12 +634,12 @@ public class Sirius {
      * @return true if a beautiful tree was found
      */
     public boolean beautifyTree(IdentificationResult result, Ms2Experiment experiment, boolean recalibrating) {
-        return beautifyTree(null, result, experiment, recalibrating);
+        return beautifyTree(null, result, experiment, recalibrating, null);
     }
 
-    public boolean beautifyTree(MasterJJob<?> master, IdentificationResult result, Ms2Experiment experiment, boolean recalibrating) {
+    public boolean beautifyTree(MasterJJob<?> master, IdentificationResult result, Ms2Experiment experiment, boolean recalibrating, ProcessedInput initialInput) {
         if (result.getBeautifulTree() != null) return true;
-        FTree beautifulTree = beautifyTree(master, result.getStandardTree(), experiment, recalibrating);
+        FTree beautifulTree = beautifyTree(master, result.getStandardTree(), experiment, recalibrating, initialInput);
         if (beautifulTree != null) {
             result.setBeautifulTree(beautifulTree);
             return true;
@@ -648,10 +648,10 @@ public class Sirius {
     }
 
     public FTree beautifyTree(FTree tree, Ms2Experiment experiment, boolean recalibrating) {
-        return beautifyTree(null, tree, experiment, recalibrating);
+        return beautifyTree(null, tree, experiment, recalibrating, null);
     }
 
-    public FTree beautifyTree(MasterJJob<?> master, FTree tree, Ms2Experiment experiment, boolean recalibrating) {
+    public FTree beautifyTree(MasterJJob<?> master, FTree tree, Ms2Experiment experiment, boolean recalibrating, ProcessedInput initialInput) {
         if (tree.getAnnotation(Beautified.class, Beautified.IS_UGGLY).isBeautiful()) return tree;
         final PrecursorIonType ionType = tree.getAnnotationOrThrow(PrecursorIonType.class);
         final MutableMs2Experiment mexp = new MutableMs2Experiment(experiment);
@@ -676,9 +676,9 @@ public class Sirius {
         //todo remove when cleaning up the api
         final FTree btree;
         if (master != null) {
-            btree = master.submitSubJob(FasterTreeComputationInstance.beautify(getMs2Analyzer(), tree)).takeResult().getResults().get(0);
+            btree = master.submitSubJob(FasterTreeComputationInstance.beautify(getMs2Analyzer(), tree, initialInput)).takeResult().getResults().get(0);
         } else {
-            btree = SiriusJobs.getGlobalJobManager().submitJob(FasterTreeComputationInstance.beautify(getMs2Analyzer(), tree)).takeResult().getResults().get(0);
+            btree = SiriusJobs.getGlobalJobManager().submitJob(FasterTreeComputationInstance.beautify(getMs2Analyzer(), tree, initialInput)).takeResult().getResults().get(0);
         }
 
 
