@@ -31,6 +31,7 @@ import de.unijena.bioinf.ChemistryBase.ms.*;
 import de.unijena.bioinf.ChemistryBase.ms.utils.SimpleMutableSpectrum;
 import de.unijena.bioinf.ChemistryBase.ms.utils.Spectrums;
 import de.unijena.bioinf.IsotopePatternAnalysis.PatternGenerator;
+import de.unijena.bioinf.IsotopePatternAnalysis.generation.FastIsotopePatternGenerator;
 
 import java.io.File;
 import java.io.FileReader;
@@ -130,19 +131,17 @@ public class Main {
                     ionization = new Charge(1);
                 }
 
-                final double treshold;
-                final int limit;
                 final Spectrum<?> spectrum;
-                final PatternGenerator generator = new PatternGenerator(ionization, normalization);
+                final FastIsotopePatternGenerator generator = new FastIsotopePatternGenerator(normalization);
                 if (options.getIntensityTreshold() == null && options.getNumberOfIsotopePeaks() == null) {
-                    treshold = 0.01d;
-                    limit = Integer.MAX_VALUE;
-                    spectrum = generator.generatePatternWithTreshold(formula, treshold);
+                    spectrum = generator.simulatePattern(formula, ionization);
                 } else {
-                    treshold = (options.getIntensityTreshold() == null) ? 1e-16 : options.getIntensityTreshold()/100d;
-                    limit = (options.getNumberOfIsotopePeaks() == null) ? Integer.MAX_VALUE : options.getNumberOfIsotopePeaks();
+                    final int limit = (options.getNumberOfIsotopePeaks() == null) ? Integer.MAX_VALUE : options.getNumberOfIsotopePeaks();
                     if (options.getIntensityTreshold() != null) {
-                        final Spectrum<?> s = generator.generatePatternWithTreshold(formula, treshold);
+                        final double treshold = (options.getIntensityTreshold() == null) ? 1e-16 : options.getIntensityTreshold()/100d;
+                        generator.setMaximalNumberOfPeaks(limit);
+                        generator.setMinimalProbabilityThreshold(treshold);
+                        final Spectrum<?> s = generator.simulatePattern(formula, ionization);
                         final MutableSpectrum<?> t = new SimpleMutableSpectrum(s);
                         Spectrums.sortSpectrumByDescendingIntensity(t);
                         for (int k=t.size()-1; k >= limit; --k) {
@@ -151,7 +150,8 @@ public class Main {
                         Spectrums.sortSpectrumByMass(t);
                         spectrum = new SimpleMutableSpectrum(t);
                     } else {
-                        spectrum = generator.generatePattern(formula, limit);
+                        generator.setMaximalNumberOfPeaks(limit);
+                        spectrum = generator.simulatePattern(formula, ionization);
                     }
                 }
                 // output
