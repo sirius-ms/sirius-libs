@@ -106,7 +106,7 @@ public class Sirius {
             final AbstractTreeComputationInstance instance = getTreeComputationImplementation(getMs2Analyzer(), experiment, numberOfResultsToKeep);
             instance.addPropertyChangeListener(JobProgressEvent.JOB_PROGRESS_EVENT, evt -> updateProgress(0, 105, (int) evt.getNewValue()));
             final ProcessedInput pinput = instance.validateInput();
-            performMs1Analysis(instance);
+            performMs1Analysis(instance); //todo
             submitSubJob(instance);
             AbstractTreeComputationInstance.FinalResult fr = instance.awaitResult();
 
@@ -1077,7 +1077,8 @@ public class Sirius {
             maxScore = Math.max(pat.getScore(), maxScore);
             final int numberOfIsoPeaks = pat.getPattern().size()-1;
             if (pat.getScore()>=2*numberOfIsoPeaks) {
-                isoPeaks = Math.max(pat.getPattern().size(), isoPeaks);
+//                isoPeaks = Math.max(pat.getPattern().size(), isoPeaks);
+                isoPeaks = Math.max(numberOfIsoPeaks, isoPeaks);
                 scoreThresholdForFiltering = isoPeaks*1d;
                 doFilter=true;
             }
