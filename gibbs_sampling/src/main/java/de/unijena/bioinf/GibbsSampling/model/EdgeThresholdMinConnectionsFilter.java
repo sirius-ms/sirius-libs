@@ -157,45 +157,11 @@ public class EdgeThresholdMinConnectionsFilter extends LocalEdgeFilter {
             }
         }
 
-//todo errors with parallelization.
-//        allIndices = new ArrayList<>(graph.getSize());
-//        for (int i = 0; i < graph.numberOfCompounds(); i++) {
-//            allIndices.add(i);
-//        }
-//        System.out.println("size "+allIndices.size());
-//        ConcurrentLinkedQueue<Integer> candidateIndicesQueue = new ConcurrentLinkedQueue<>(allIndices);
-//        System.out.println("size2 "+candidateIndicesQueue.size());
-//        jobs = new ArrayList<>();
-//        for (int i = 0; i < SiriusJobs.getGlobalJobManager().getCPUThreads(); i++) {
-//            BasicJJob job = new MakeEdgeScoresSymmetricWorker(candidateIndicesQueue, graph, connectionsList);
-//            jobs.add(job);
-//            masterJJob.submitSubJob(job);
-//        }
-//        System.out.println("running "+jobs.size()+" workers to postprocess edges, symmetry step");
-//
-//
-//        for (BasicJJob job : jobs) {
-//            job.awaitResult();
-//        }
-//
-//        for (TIntArrayList intArrayList : connectionsList) {
-//            intArrayList.sort();
-//        }
+
         System.out.println("postprocess: second step symmetry took "+(System.currentTimeMillis()-start));
 
-
-//        candidateIndicesQueue = new ConcurrentLinkedQueue<>(allIndices);
-//        System.out.println("size3 "+candidateIndicesQueue.size());
         int[][] connections = new int[graph.getSize()][];
-//        jobs = new ArrayList<>();
-//        for (int i = 0; i < SiriusJobs.getGlobalJobManager().getCPUThreads(); i++) {
-//            BasicJJob job = new CopyArrayJob(connections, connectionsList, candidateIndicesQueue);
-//            jobs.add(job);
-//            masterJJob.submitSubJob(job);
-//        }
-//        for (BasicJJob job : jobs) {
-//            job.awaitResult();
-//        }
+
         for(int i = 0; i < graph.getSize(); ++i) {
             connections[i] = connectionsList[i].toArray();
         }
