@@ -32,7 +32,7 @@ public class ValenceFilter implements FormulaFilter {
     private final double minValence;
 
     public ValenceFilter() {
-        this(-0.5d);
+        this(-1d);
     }
 
     public ValenceFilter(@Parameter("minValence") double minValence) {
