@@ -128,68 +128,40 @@ public class EdgeThresholdMinConnectionsFilter extends LocalEdgeFilter {
 
         start = System.currentTimeMillis();
         for(int i = 0; i < graph.getSize(); ++i) {
-            for(int j = i + 1; j < graph.getSize(); ++j) {
-                double a = graph.getLogWeight(i, j);
-                double b = graph.getLogWeight(j, i);
+            int[] connections = graph.getLogWeightConnections(i);
+            for (int j = 0; j < connections.length; j++) {
+                int c = connections[j];
+
+                //check if this pair of edges has already beend considered
+                if (c<i && graph.hasLogWeightConnections(c, i)) continue;
+
+                double a = graph.getLogWeight(i, c);
+                double b = graph.getLogWeight(c, i);
                 double max;
                 if(a < b) {
-                    graph.setLogWeight(i, j, b);
+                    graph.setLogWeight(i, c, b);
                     max = b;
                 } else if(b < a) {
-                    graph.setLogWeight(j, i, a);
+                    graph.setLogWeight(c, i, a);
                     max = a;
                 } else {
                     max = a;
                 }
 
                 if(max > 0.0D) {
-                    connectionsList[i].add(j);
-                    connectionsList[j].add(i);
+                    connectionsList[i].add(c);
+                    connectionsList[c].add(i);
                 } else if (max < 0d) {
                     throw new RuntimeException("Edge has a negative weight");
                 }
             }
         }
 
-//todo errors with parallelization.
-//        allIndices = new ArrayList<>(graph.getSize());
-//        for (int i = 0; i < graph.numberOfCompounds(); i++) {
-//            allIndices.add(i);
-//        }
-//        System.out.println("size "+allIndices.size());
-//        ConcurrentLinkedQueue<Integer> candidateIndicesQueue = new ConcurrentLinkedQueue<>(allIndices);
-//        System.out.println("size2 "+candidateIndicesQueue.size());
-//        jobs = new ArrayList<>();
-//        for (int i = 0; i < SiriusJobs.getGlobalJobManager().getCPUThreads(); i++) {
-//            BasicJJob job = new MakeEdgeScoresSymmetricWorker(candidateIndicesQueue, graph, connectionsList);
-//            jobs.add(job);
-//            masterJJob.submitSubJob(job);
-//        }
-//        System.out.println("running "+jobs.size()+" workers to postprocess edges, symmetry step");
-//
-//
-//        for (BasicJJob job : jobs) {
-//            job.awaitResult();
-//        }
-//
-//        for (TIntArrayList intArrayList : connectionsList) {
-//            intArrayList.sort();
-//        }
+
         System.out.println("postprocess: second step symmetry took "+(System.currentTimeMillis()-start));
 
-
-//        candidateIndicesQueue = new ConcurrentLinkedQueue<>(allIndices);
-//        System.out.println("size3 "+candidateIndicesQueue.size());
         int[][] connections = new int[graph.getSize()][];
-//        jobs = new ArrayList<>();
-//        for (int i = 0; i < SiriusJobs.getGlobalJobManager().getCPUThreads(); i++) {
-//            BasicJJob job = new CopyArrayJob(connections, connectionsList, candidateIndicesQueue);
-//            jobs.add(job);
-//            masterJJob.submitSubJob(job);
-//        }
-//        for (BasicJJob job : jobs) {
-//            job.awaitResult();
-//        }
+
         for(int i = 0; i < graph.getSize(); ++i) {
             connections[i] = connectionsList[i].toArray();
         }
