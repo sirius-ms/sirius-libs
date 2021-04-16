@@ -30,10 +30,32 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public interface ConfidenceScorer {
 
-    double computeConfidence(@NotNull final Ms2Experiment exp, @NotNull final IdentificationResult<?> idResult, @NotNull List<Scored<FingerprintCandidate>> allDbCandidates, @NotNull ProbabilityFingerprint query, @Nullable final Predicate<FingerprintCandidate> filter);
+    default double computeConfidence(@NotNull final Ms2Experiment exp,
+                                     @NotNull final IdentificationResult<?> idResult,
+                                     @NotNull List<Scored<FingerprintCandidate>> allDbCandidatesScoreA,
+                                     @NotNull List<Scored<FingerprintCandidate>> allDbCandidatesScoreB,
+                                     @NotNull ProbabilityFingerprint query,
+                                     @Nullable Predicate<FingerprintCandidate> filter) {
+        if (filter == null)
+            return computeConfidence(exp, idResult, allDbCandidatesScoreA, allDbCandidatesScoreB, allDbCandidatesScoreA, allDbCandidatesScoreB, query);
 
-    double computeConfidence(@NotNull final Ms2Experiment exp, @NotNull final IdentificationResult<?> idResult, @NotNull List<Scored<FingerprintCandidate>> allDbCandidates, @NotNull List<Scored<FingerprintCandidate>> searchDBCandidates, @NotNull ProbabilityFingerprint query);
+        return computeConfidence(exp, idResult,
+                allDbCandidatesScoreA, allDbCandidatesScoreB,
+                allDbCandidatesScoreA.stream().filter(c -> filter.test(c.getCandidate())).collect(Collectors.toList()),
+                allDbCandidatesScoreB.stream().filter(c -> filter.test(c.getCandidate())).collect(Collectors.toList()),
+                query);
+    }
+
+    double computeConfidence(@NotNull final Ms2Experiment exp,
+                             @NotNull final IdentificationResult<?> idResult,
+                             @NotNull List<Scored<FingerprintCandidate>> allDbCandidatesScoreA,
+                             @NotNull List<Scored<FingerprintCandidate>> allDbCandidatesScoreB,
+                             @NotNull List<Scored<FingerprintCandidate>> searchDBCandidatesScoreA,
+                             @NotNull List<Scored<FingerprintCandidate>> searchDBCandidatesScoreB,
+                             @NotNull ProbabilityFingerprint query
+    );
 }
