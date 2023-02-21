@@ -26,6 +26,7 @@ import com.github.scribejava.apis.auth0.Auth0Service;
 import com.github.scribejava.apis.openid.OpenIdOAuth2AccessToken;
 import com.github.scribejava.core.builder.ServiceBuilder;
 import com.github.scribejava.core.builder.api.DefaultApi20;
+import com.github.scribejava.core.model.OAuth2AccessToken;
 import com.github.scribejava.core.model.Response;
 import com.github.scribejava.core.oauth.OAuth20Service;
 import com.github.scribejava.core.revoke.TokenTypeHint;
@@ -52,11 +53,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
 public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Closeable {
-
     private OAuth20Service service;
 
     @Nullable
     private String refreshToken;
+    @Nullable
     private Token token;
 
 
@@ -82,10 +83,27 @@ public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Clos
     }
 
     public AuthService(@NotNull OAuth20Service service, @Nullable String refreshToken) {
-        this.refreshToken = refreshToken;
         this.service = service;
+        tokenLock.writeLock().lock();
+        try {
+            if (refreshToken != null)
+                setTokens(requestAccessTokenRefreshFlow(refreshToken));
+        } catch (Exception e) {
+            LoggerFactory.getLogger(getClass()).error("Error when using given refresh_token. Not logged in. Re-login with PW Flow might be necessary", e);
+            logout();
+        } finally {
+            tokenLock.writeLock().unlock();
+        }
     }
 
+
+    private void setTokens(@Nullable Token token) {
+        if (token != null) {
+            if (token.getSource().getRefreshToken() != null)
+                this.refreshToken = token.getSource().getRefreshToken(); //replace with fresh token if available
+            this.token = token;
+        }
+    }
 
     private static OAuth20Service buildService(@NotNull DefaultApi20 authAPI, @NotNull String clientID, @Nullable String clientSecret, @Nullable CloseableHttpAsyncClient client) {
         ServiceBuilder b = new ServiceBuilder(clientID);
@@ -121,8 +139,12 @@ public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Clos
         return new Token((OpenIdOAuth2AccessToken) service.refreshAccessToken(refreshToken));
     }
 
+    private Token requestAccessTokenRefreshFlow(@NotNull String refreshToken) throws IOException, ExecutionException, InterruptedException {
+        return new Token((OpenIdOAuth2AccessToken) service.refreshAccessToken(refreshToken));
+    }
+
     protected Token requestAccessTokenPasswordFlow(String username, String password) throws IOException, ExecutionException, InterruptedException {
-        return new Token((OpenIdOAuth2AccessToken) service.getAccessTokenPasswordGrant(username, password, "offline_access openid")); //request token and new refresh token
+        return new Token((OpenIdOAuth2AccessToken) service.getAccessTokenPasswordGrant(username, password, "offline_access openid license:thin license:full")); // license:full request token and new refresh token
     }
 
     /**
@@ -137,7 +159,7 @@ public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Clos
 
         tokenLock.writeLock().lock();
         try {
-            token = requestAccessTokenRefreshFlow();
+            setTokens(requestAccessTokenRefreshFlow());
         } catch (IOException | InterruptedException | ExecutionException e) {
             LoggerFactory.getLogger(getClass()).warn("Error when refreshing access_token with current refresh_token.", e);
             return false;
@@ -193,11 +215,11 @@ public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Clos
             try {
                 if (force || needsRefreshRaw()) {
                     if (hasClientSecret()) {
-                        token = requestAccessTokenClientFlow(); //todo add email or openID scope?
+                        setTokens(requestAccessTokenClientFlow());
                     } else {
                         if (refreshToken == null || refreshToken.isBlank())
                             throw new LoginException(new NullPointerException("Refresh token is null or empty!"));
-                        token = requestAccessTokenRefreshFlow();
+                        setTokens(requestAccessTokenRefreshFlow());
                     }
                 }
             } catch (IOException | InterruptedException | ExecutionException e) {
@@ -212,18 +234,16 @@ public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Clos
     public void login(String username, String password) throws IOException, ExecutionException, InterruptedException {
         tokenLock.writeLock().lock();
         try {
-            token = requestAccessTokenPasswordFlow(username, password);
-            refreshToken = token.getSource().getRefreshToken();
+            setTokens(requestAccessTokenPasswordFlow(username, password));
         } finally {
             tokenLock.writeLock().unlock();
         }
     }
 
-    public void login(String refreshToken) throws IOException {
+    public void login(String refreshToken) throws IOException, ExecutionException, InterruptedException {
         tokenLock.writeLock().lock();
         try {
-            this.refreshToken = refreshToken;
-            refreshIfNeeded();
+            setTokens(requestAccessTokenRefreshFlow(refreshToken));
         } finally {
             tokenLock.writeLock().unlock();
         }
@@ -299,6 +319,19 @@ public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Clos
 
     protected String getRefreshToken() {
         return refreshToken;
+    }
+
+    public String getRefreshTokenForQuickReuse() throws IOException, ExecutionException, InterruptedException {
+        tokenLock.writeLock().lock();
+        try {
+            final String r = getRefreshToken();
+            if (r == null)
+                return null;
+            setTokens(requestAccessTokenRefreshFlow(r)); //get a fat one
+            return r;
+        } finally {
+            tokenLock.writeLock().unlock();
+        }
     }
 
     public URI signUpURL(URI redirectUrl) {
