@@ -158,10 +158,6 @@ public final class RestAPI extends AbstractWebAPI<RESTDatabase> {
         this(authService, Tokens.getActiveSubscription(token));
     }
 
-    public URI getSignUpURL() {
-        return getAuthService().signUpURL(accountClient.getSignUpRedirectURL());
-    }
-
     @Override
     public void changeActiveSubscription(@Nullable Subscription activeSubscription) {
         this.activeSubscription = activeSubscription;
@@ -180,12 +176,6 @@ public final class RestAPI extends AbstractWebAPI<RESTDatabase> {
         this.fingerprintClient.setServerUrl(hostSupplier);
         this.canopusClient.setServerUrl(hostSupplier);
     }
-
-    @Override
-    public boolean deleteAccount() {
-        return ProxyManager.doWithClient(accountClient::deleteAccount);
-    }
-
 
     @Override
     public void shutdown() throws IOException {

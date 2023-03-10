@@ -39,6 +39,11 @@ import java.net.URISyntaxException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
+/**
+ * @deprecated user Browser based {@link de.unijena.bioinf.auth.UserPortal} for Account management instead
+ * Still needed to accept terms and conditions within SIRIUS
+ */
+@Deprecated
 public class AccountClient extends AbstractClient {
     private final AuthService authService;
     private final String versionSuffix;
@@ -57,6 +62,10 @@ public class AccountClient extends AbstractClient {
     }
 
 
+    /**
+     * Redirect URI for native Auth0 signup (no user portal involved)
+     * @return The redirect URI
+     */
     public URI getSignUpRedirectURL() {
         try {
             return getBaseURI("/account/signUp").build();
@@ -65,6 +74,10 @@ public class AccountClient extends AbstractClient {
         }
     }
 
+    /**
+     * URI for Native Auth0 signup (no user portal involved)
+     * @return The signup URI with parameters
+     */
     public URI getSignUpURL() {
         return authService.signUpURL(getSignUpRedirectURL());
     }

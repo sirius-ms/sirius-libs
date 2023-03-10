@@ -26,7 +26,6 @@ import com.github.scribejava.apis.auth0.Auth0Service;
 import com.github.scribejava.apis.openid.OpenIdOAuth2AccessToken;
 import com.github.scribejava.core.builder.ServiceBuilder;
 import com.github.scribejava.core.builder.api.DefaultApi20;
-import com.github.scribejava.core.model.OAuth2AccessToken;
 import com.github.scribejava.core.model.Response;
 import com.github.scribejava.core.oauth.OAuth20Service;
 import com.github.scribejava.core.revoke.TokenTypeHint;
@@ -319,19 +318,6 @@ public class AuthService implements IOFunctions.IOConsumer<HttpUriRequest>, Clos
 
     protected String getRefreshToken() {
         return refreshToken;
-    }
-
-    public String getRefreshTokenForQuickReuse() throws IOException, ExecutionException, InterruptedException {
-        tokenLock.writeLock().lock();
-        try {
-            final String r = getRefreshToken();
-            if (r == null)
-                return null;
-            setTokens(requestAccessTokenRefreshFlow(r)); //get a fat one
-            return r;
-        } finally {
-            tokenLock.writeLock().unlock();
-        }
     }
 
     public URI signUpURL(URI redirectUrl) {
