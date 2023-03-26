@@ -57,9 +57,6 @@ allprojects {
     apply plugin: 'java'
     apply plugin: 'maven-publish'
 
-    sourceCompatibility = 13
-    targetCompatibility = 13
-
     compileJava.options.encoding = "UTF-8"
     compileTestJava.options.encoding = "UTF-8"
     javadoc.options.encoding = 'UTF-8'
