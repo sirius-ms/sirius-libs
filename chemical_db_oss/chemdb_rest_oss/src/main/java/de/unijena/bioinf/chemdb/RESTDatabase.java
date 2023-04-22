@@ -31,9 +31,7 @@ import de.unijena.bioinf.ms.rest.client.chemdb.ChemDBClient;
 import de.unijena.bioinf.ms.rest.client.chemdb.StructureSearchClient;
 import de.unijena.bioinf.storage.blob.BlobStorage;
 import de.unijena.bioinf.storage.blob.file.FileBlobStorage;
-import org.apache.hc.client5.http.classic.HttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
+import okhttp3.OkHttpClient;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -49,8 +47,8 @@ public class RESTDatabase implements AbstractChemicalDatabase {
         FingerIDProperties.fingeridFullVersion();
     }
 
-    private final HttpClient client;
-    private final boolean closeCLient = false;
+    private final OkHttpClient client;
+    private final boolean closeCLient;
 
     private StructureSearchClient chemDBClient;
     protected final ChemDBFileCache cache;
@@ -72,11 +70,12 @@ public class RESTDatabase implements AbstractChemicalDatabase {
         }
     }
 
-    public RESTDatabase(@Nullable BlobStorage cacheDir, long filter, @NotNull StructureSearchClient chemDBClient, @NotNull HttpClient client) {
+    public RESTDatabase(@Nullable BlobStorage cacheDir, long filter, @NotNull StructureSearchClient chemDBClient, @NotNull OkHttpClient client) {
         this(cacheDir, filter, chemDBClient, client, false);
     }
 
-    public RESTDatabase(@Nullable BlobStorage cacheDir, long filter, @NotNull StructureSearchClient chemDBClient, @NotNull HttpClient client, boolean closeClient) {
+    public RESTDatabase(@Nullable BlobStorage cacheDir, long filter, @NotNull StructureSearchClient chemDBClient, @NotNull OkHttpClient client, boolean closeClient) {
+        this.closeCLient = closeClient;
         this.filter = filter;
         this.chemDBClient = chemDBClient;
         this.client = client;
@@ -105,15 +104,15 @@ public class RESTDatabase implements AbstractChemicalDatabase {
     }
 
     public RESTDatabase(long filter, @NotNull URI serverURL) {
-        this(RESTDatabase.defaultCache(), filter, new ChemDBClient(serverURL), HttpClients.createDefault(), true);
+        this(RESTDatabase.defaultCache(), filter, new ChemDBClient(serverURL), new OkHttpClient.Builder().build(), true);
     }
 
     public RESTDatabase(long filter, @NotNull URI serverURL, @NotNull AuthService authService) {
-        this(RESTDatabase.defaultCache(), filter, new ChemDBClient(serverURL, authService), HttpClients.createDefault(), true);
+        this(RESTDatabase.defaultCache(), filter, new ChemDBClient(serverURL, authService), new OkHttpClient.Builder().build(), true);
     }
 
     public RESTDatabase(long filter, @NotNull StructureSearchClient chemDBClient) {
-        this(RESTDatabase.defaultCache(), filter, chemDBClient, HttpClients.createDefault(), true);
+        this(RESTDatabase.defaultCache(), filter, chemDBClient, new OkHttpClient.Builder().build(), true);
     }
 
 
@@ -196,12 +195,11 @@ public class RESTDatabase implements AbstractChemicalDatabase {
 
     @Override
     public void close() {
-        if (closeCLient && client != null && client instanceof CloseableHttpClient) {
-            try {
-                ((CloseableHttpClient)client).close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+        if (closeCLient && client != null) {
+            client.connectionPool().evictAll();
+            client.dispatcher().cancelAll();
+            client.dispatcher().executorService().shutdown();
+            client.connectionPool().evictAll();
         }
     }
 }

@@ -71,10 +71,8 @@ import de.unijena.bioinf.rest.ProxyManager;
 import de.unijena.bioinf.storage.blob.BlobStorage;
 import de.unijena.bioinf.webapi.AbstractWebAPI;
 import de.unijena.bioinf.webapi.Tokens;
-import org.apache.hc.client5.http.classic.HttpClient;
-import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.classic.methods.HttpUriRequest;
-import org.apache.hc.client5.http.config.RequestConfig;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -121,7 +119,7 @@ public final class RestAPI extends AbstractWebAPI<RESTDatabase> {
 
     public RestAPI(@NotNull AuthService authService, @Nullable Subscription activeSubscription) {
         super(authService);
-        IOFunctions.IOConsumer<HttpUriRequest> subsDeco = (req) -> {
+        IOFunctions.IOConsumer<Request.Builder> subsDeco = (req) -> {
             if (getActiveSubscription() != null)
                 req.addHeader("SUBSCRIPTION", getActiveSubscription().getSid());
         };
@@ -287,9 +285,10 @@ public final class RestAPI extends AbstractWebAPI<RESTDatabase> {
         }
     }
 
-    private Optional<ConnectionError> checkUnsecuredConnection(@NotNull HttpClient client) {
+    private Optional<ConnectionError> checkUnsecuredConnection(@NotNull OkHttpClient client) {
         try {
-            serverInfoClient.execute(client, () -> new HttpGet(serverInfoClient.getBaseURI("/actuator/health").build()));
+            serverInfoClient.execute(client, () -> new Request.Builder().get()
+                    .url(serverInfoClient.getBaseURI("/actuator/health").build()));
             return Optional.empty();
         } catch (HttpErrorResponseException e) {
             String message = "Could not load version info (unsecured api endpoint). Bad Response Code.";
@@ -300,15 +299,10 @@ public final class RestAPI extends AbstractWebAPI<RESTDatabase> {
         }
     }
 
-    private Optional<ConnectionError> checkSecuredConnection(@NotNull HttpClient client) {
+    private Optional<ConnectionError> checkSecuredConnection(@NotNull OkHttpClient client) {
         try {
-            serverInfoClient.execute(client, () -> {
-                HttpGet get = new HttpGet(serverInfoClient.getBaseURI("/api/check").build());
-                final int timeoutInSeconds = 8000;
-                get.setConfig(RequestConfig.custom().setConnectTimeout(timeoutInSeconds, TimeUnit.SECONDS)
-                        /*.setSocketTimeout(timeoutInSeconds)*/.build());
-                return get;
-            });
+            serverInfoClient.execute(client, () -> new Request.Builder().get()
+                    .url(serverInfoClient.getBaseURI("/api/check").build()));
             return Optional.empty();
         } catch (HttpErrorResponseException e) {
             String message = "Could not reach secured api endpoint. Bad Response Code.";
@@ -470,8 +464,7 @@ public final class RestAPI extends AbstractWebAPI<RESTDatabase> {
      * @param doWithApi
      * @throws IOException
      */
-    @Override
-    public void executeBatch(IOFunctions.BiIOConsumer<Clients, HttpClient> doWithApi) throws IOException {
+    public void executeBatch(IOFunctions.BiIOConsumer<Clients, OkHttpClient> doWithApi) throws IOException {
         ProxyManager.consumeClient(client -> {
                 doWithApi.accept(new Clients() {
                     @Override
