@@ -48,7 +48,6 @@ import de.unijena.bioinf.lcms.peakshape.CustomPeakShapeFitting;
 import de.unijena.bioinf.lcms.peakshape.PeakShape;
 import de.unijena.bioinf.lcms.quality.Quality;
 import de.unijena.bioinf.model.lcms.*;
-import de.unijena.bionf.spectral_alignment.CosineQuerySpectrum;
 import de.unijena.bionf.spectral_alignment.CosineQueryUtils;
 import de.unijena.bionf.spectral_alignment.IntensityWeightedSpectralAlignment;
 import gnu.trove.list.array.TDoubleArrayList;
@@ -247,12 +246,12 @@ public class LCMSProccessingInstance {
         network.reinsertLikelyCorrelatedEdgesIntoFeatures();
 
 
-        System.out.println("############ STATISTICS ################");
+        System.out.println("#### LCMS Preprocessing STATISTICS #####");
         possibleIonTypeCounter.forEachEntry((key,count)->{
             System.out.printf("%s %d times (%.2f %%)\n", key.toString(), count, count*100.0d/ncompounds[0] );
             return true;
         });
-        System.out.println("--------------- SELECTED --------------------");
+        System.out.println("--------------- SELECTED ---------------");
         int[] other = new int[1];
         selectedIonTypeCounter.forEachEntry((key,count)->{
             System.out.printf("%s %d times (%.2f %%)\n", key.toString(), count, count*100.0d/ncompounds[0] );
@@ -260,6 +259,8 @@ public class LCMSProccessingInstance {
             return true;
         });
         System.out.printf("Multiple possibilities: %d times (%.2f %%)\n", ncompounds[0]-other[0], (ncompounds[0]-other[0]+0d)*100.0d/ncompounds[0] );
+        System.out.println("########################################");
+        System.out.println();
 
         /*try {
             network.writeToFile(this, new File("/home/kaidu/network.json"));

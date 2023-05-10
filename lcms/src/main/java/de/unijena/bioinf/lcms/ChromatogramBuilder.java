@@ -27,6 +27,7 @@ import de.unijena.bioinf.ChemistryBase.ms.utils.SimpleSpectrum;
 import de.unijena.bioinf.ChemistryBase.ms.utils.Spectrums;
 import de.unijena.bioinf.model.lcms.*;
 import gnu.trove.list.array.TDoubleArrayList;
+import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Optional;
@@ -401,11 +402,11 @@ public class ChromatogramBuilder {
         //extrema.smooth((i)->(float)this.sample.ms1NoiseModel.getNoiseLevel(peak.getScanNumberAt(i),peak.getMzAt(0)), peak, 0.33, 5);
         if (extrema.numberOfExtrema() > 16 && peak.numberOfScans() >= 200 && filter.getRadius()<32) {
             // try a larger filter
-            System.out.println("Use an even larger filter! 32");
+            LoggerFactory.getLogger(getClass()).debug("Use an even larger filter! 32");
             return detectExtremaWithSmoothing2(peak, SavitzkyGolayFilter.Window32Polynomial2);
         } else if (extrema.numberOfExtrema() > 8 && peak.numberOfScans() >= 100 && filter.getRadius()<16) {
             // try a larger filter
-            System.out.println("Use an even larger filter! 16");
+            LoggerFactory.getLogger(getClass()).debug("Use an even larger filter! 16");
             return detectExtremaWithSmoothing2(peak, SavitzkyGolayFilter.Window16Polynomial2);
         } else
             return extrema;
