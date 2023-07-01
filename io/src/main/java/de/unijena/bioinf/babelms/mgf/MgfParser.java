@@ -333,7 +333,9 @@ public class MgfParser extends SpectralParser implements Parser<Ms2Experiment> {
         exp.setMs1Spectra(new ArrayList<>());
         exp.setIonMass(inst.peekNext().spectrum.getPrecursorMz());
         exp.setName(inst.peekNext().name);
-        if (exp.getName() == null) exp.setName(inst.peekNext().featureId);
+        exp.setFeatureId(inst.peekNext().featureId);
+        if (exp.getName() == null)
+            exp.setName(exp.getFeatureId());
         if (exp.getName() == null) {
             exp.setName("FEATURE_" + inst.specIndex);
         }
