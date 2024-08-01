@@ -1,3 +1,4 @@
+### This repository has been archived and is no longer maintained! The SIRIUS libraries have been mode to https://github.com/sirius-ms/sirius
 --------------------------------------------------------------------------
 SIRIUS -- MS and MS/MS libraries
 --------------------------------------------------------------------------
